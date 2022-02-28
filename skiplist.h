@@ -1,6 +1,8 @@
 #include <iostream>
 #include <ctime>
 #include <mutex>
+#include <stdlib.h>
+#include <string.h>
 
 std::mutex mtx;	//用于保持线程安全
 
@@ -12,7 +14,9 @@ struct Node {
 	Node **next;
 	Node() {}
 	Node(int key, int val, int level) : m_key(key), m_val(val), m_level(level) {
-		next = new Node*[level];
+		next = new Node*[level+1];
+		memset(next, 0, sizeof(Node*)*(level+1));
+		
 	}
 
 	~Node() {
@@ -51,31 +55,29 @@ SkipList::SkipList(int maxLevel)
 	m_size = 0;
 
 	m_head = new Node(-1, -1, maxLevel);
-	//随机数种子，用来生成新插入元素的层数
-	srand(time(nullptr));
 }
 
 //释放内存
 SkipList::~SkipList()
 {
-	if (m_head == nullptr) {
-		return;
-	}
-	Node* cur = m_head;
-	while (cur) {
-		Node* node = cur->next[0];
-		delete cur->next[0];
-		cur->next[0] = nullptr;
-		cur = node;
+	// if (m_head == nullptr) {
+	// 	return;
+	// }
+	// Node* cur = m_head;
+	// while (cur) {
+	// 	Node* node = cur->next[0];
+	// 	delete cur->next[0];
+	// 	cur->next[0] = nullptr;
+	// 	cur = node;
 		
-	}
+	// }
 	
 }
 
 //随机生成一个层数，新加入的元素将被放置在这一层
 int SkipList::getRandomLevel()
 {
-	int k = 0;
+	int k = 1;
 
 	while (rand() % 2) {
 		k++;
@@ -118,9 +120,10 @@ int SkipList::insertNode(int key, int val)
 	mtx.lock();
 	
 	Node *curNode = m_head;
-	Node **newNextArr = new Node*[m_maxLevel];
-
-	for (int i = m_skipListLevel - 1; i >=0; i--) {
+	// Node *newNextArr[m_maxLevel+1];
+	// memset(newNextArr, 0, sizeof(Node*)*(m_maxLevel+1));  
+	Node **newNextArr = new Node*[m_maxLevel+1];
+	for (int i = m_skipListLevel; i >=0; i--) {
 		while (curNode->next[i] != nullptr && curNode->next[i]->m_key < key) {
 			curNode = curNode->next[i];
 		}
@@ -148,7 +151,7 @@ int SkipList::insertNode(int key, int val)
 
 		//如果新产生的层数，大于当前的层数，则需要在高于当前层数的层开始为链表头赋上新值
 		if (randomLevel > m_skipListLevel) {
-			for (int i = m_skipListLevel; i < randomLevel; i++) {
+			for (int i = m_skipListLevel+1; i < randomLevel+1; i++) {
 				newNextArr[i] = m_head;
 			}
 			m_skipListLevel = randomLevel;
@@ -157,7 +160,7 @@ int SkipList::insertNode(int key, int val)
 		//创建新结点
 		Node* newNode = createNode(key, val, randomLevel);
 		//真正的插入操作
-		for (int i = 0; i < randomLevel; i++) {
+		for (int i = 0; i <= randomLevel; i++) {
 			newNode->next[i] = newNextArr[i]->next[i];
 			newNextArr[i]->next[i] = newNode;
 		}
@@ -178,7 +181,7 @@ bool SkipList::searchElement(int key)
 	std::cout << "start search elemnt...\n";
 	Node *cur = m_head;
 
-	for (int i = m_skipListLevel - 1; i >= 0; i--) {
+	for (int i = m_skipListLevel; i >= 0; i--) {
 		while (cur->next[i] != nullptr && cur->next[i]->m_key < key) {
 			cur = cur->next[i];
 		}
@@ -201,9 +204,11 @@ void SkipList::deleteElement(int key)
 	mtx.lock();
 
 	Node *cur = m_head;
-	Node **update = new Node*[m_maxLevel];
+	// Node *update[m_maxLevel+1];
+	// memset(update, 0, sizeof(Node*)*(m_maxLevel+1));
+	Node **update = new Node*[m_maxLevel+1];
 
-	for (int i = m_skipListLevel - 1; i >= 0; i++) {
+	for (int i = m_skipListLevel; i >= 0; i++) {
 		while (cur->next[i] && cur->next[i]->m_key < key) {
 			cur = cur->next[i];
 		}
@@ -213,15 +218,15 @@ void SkipList::deleteElement(int key)
 	//定位到需要删除的结点处
 	cur = cur->next[0];
 
-	if (cur && cur->m_key == key) {
-		for (int i = 0; i < m_skipListLevel; i++) {
+	if (cur != nullptr && cur->m_key == key) {
+		for (int i = 0; i <= m_skipListLevel; i++) {
 			//对于不是该节点的层，选择跳过
 			if (update[i]->next[i] != cur) break;
 
 			//删除结点
 			update[i]->next[i] = cur->next[i];
-			delete cur;
-			cur = nullptr;
+			// delete cur;
+			// cur = nullptr;
 		}
 
 		//如果最高层的结点数为0，删除层数
